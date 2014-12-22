@@ -115,7 +115,7 @@
       
     <property name="release.jvx" location="../jvx/trunk/java/build/release" />
     
-    <copy todir="${libs}">
+    <copy todir="${lib}">
       <fileset dir="${release.jvx}">
 		<include name="jvx.jar" />
       </fileset>
