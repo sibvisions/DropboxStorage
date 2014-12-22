@@ -1,0 +1,27 @@
+Dropbox storage
+Copyright 2014 SIB Visions GmbH
+
+This product includes software developed by
+SIB Visions GmbH (http://www.sibvisions.com/).
+
+
+===
+
+LICENSE INFORMATION REGARDING BUNDLED THIRD-PARTY SOFTWARE
+
+The following third party software is distributed with Dropbox
+storage and is provided under other licenses and/or has source 
+available from other locations.
+
+* JVx
+  Licence: Apache License 2.0
+  Source code availability: http://sourceforge.net/projects/jvx/
+
+* Dropbox-Core
+  License: MIT
+  Source code availability: https://github.com/dropbox/dropbox-sdk-java
+  
+* FasterXML/Jackson
+  License: Apache License 2.0
+  Source code availability: https://github.com/FasterXML/
+  
