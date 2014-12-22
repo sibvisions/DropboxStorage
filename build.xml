@@ -1,0 +1,125 @@
+<project name="DropboxStorage" default="start.complete">
+
+  <!-- 
+    ***************************************************************** 
+  	* information   
+  	***************************************************************** 
+  	-->
+
+  <description>JVx' Dropbox storage</description>
+
+  <!-- 
+  	***************************************************************** 
+  	* global properties   
+  	***************************************************************** 
+  	-->
+
+  <property name="jar.name" value="dropboxstorage.jar" />
+
+  <!-- 
+  	***************************************************************** 
+  	* general properties   
+  	***************************************************************** 
+  	-->
+
+  <property name="build" location="${basedir}/build" />
+  <property name="buildnumber" location="${build}/buildnumber" />
+  <property name="temp" location="${build}/temp" />
+
+  <property name="src" location="${basedir}/src" />
+  <property name="libs" location="${basedir}/libs" />
+  <property name="classes" location="${temp}/classes" />
+
+  <property name="install" location="${build}/install" />
+
+  <!-- 
+  	***************************************************************** 
+  	* logging   
+  	***************************************************************** 
+  	-->
+
+  <record name="${build}/build.log" />
+
+  <!-- 
+  	***************************************************************** 
+  	* INTERNAL TASKS   
+  	***************************************************************** 
+  	-->
+
+  <!-- 
+	* cleanup tasks 
+	-->
+
+  <target name="clean.start">
+    <delete dir="${temp}" />
+    <delete dir="${install}" />
+  </target>
+
+  <target name="clean.stop">
+    <delete dir="${temp}" />
+  </target>
+
+  <!-- 
+	* compile, build tasks 
+	-->
+
+  <target name="build">
+
+    <delete dir="${classes}" />
+    <mkdir dir="${classes}" />
+
+    <!-- compile the java code -->
+    <javac srcdir="${src}" destdir="${classes}" debug="on" deprecation="on" source="1.5">
+      <classpath>
+        <fileset dir="${libs}">
+          <include name="*.jar" />
+        </fileset>
+      </classpath>
+    </javac>
+
+    <!-- copy ressource files -->
+    <copy todir="${classes}">
+      <fileset dir="${src}">
+        <include name="**/*" />
+        <exclude name="**/*.java" />
+        <exclude name="**/package.html" />
+      </fileset>
+    </copy>
+
+    <mkdir dir="${install}" />
+
+	<!-- buildnumber -->
+    <taskdef name="buildnr" classname="com.sibvisions.addons.ant.AntBuildNumber" classpath="${buildnumber}/addons.jar" />
+    <buildnr buildfile="${buildnumber}/buildnr.properties" version="1.0" name="JVx' Dropbox storage"/> 
+    
+    <!-- create the jar file -->
+    <jar jarfile="${install}/${jar.name}" basedir="${classes}">
+	  <manifest>
+        <attribute name="Implementation-Title" value="${build.versionstring}"/>
+        <attribute name="Implementation-Version" value="b${build.number} ${build.date}"/> 
+        <attribute name="Implementation-Vendor" value="SIB Visions GmbH"/>
+      </manifest>
+    </jar>
+
+  </target>
+  
+  <!-- 
+  	***************************************************************** 
+  	* PUBLIC START TASKS   
+  	***************************************************************** 
+  	-->
+
+  <target name="start.complete" depends="clean.start, build, clean.stop" description="Creates release library"/>
+
+  <target name="start.updatelibs" description="Updates all needed libraries">
+      
+    <property name="release.jvx" location="../jvx/trunk/java/build/release" />
+    
+    <copy todir="${libs}">
+      <fileset dir="${release.jvx}">
+		<include name="jvx.jar" />
+      </fileset>
+    </copy>
+  </target>
+  
+</project>
