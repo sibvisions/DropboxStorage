@@ -41,12 +41,12 @@ The test cases need a config.xml in the project directory (same location as READ
 The file should contain:
 
 <pre>
-<?xml version="1.0" encoding="UTF-8"?>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 
-<config>
-  <app accessToken="YOUR_ACCESS_TOKEN" />
-</config>
-</pre>
+&lt;config&gt;
+  &lt;app accessToken="YOUR_ACCESS_TOKEN" /&gt;
+&lt;/config&gt;
+&lt;/pre&gt;
 
 The dropbox directory is a template, used for test cases.
 
