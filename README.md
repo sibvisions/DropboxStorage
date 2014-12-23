@@ -32,7 +32,8 @@ FileUtil.save(new File(book.getValueAsString("NAME")), file.getInputStream());
 book.insert(false);
 book.setValue("FOLDER", "/");
 book.setValue("NAME", "newimage.png");
-book.setValue("CONTENT", FileUtil.getContent(ResourceUtil.getResourceAsStream(resourcepath)));
+book.setValue("CONTENT", 
+              FileUtil.getContent(ResourceUtil.getResourceAsStream(resourcepath)));
 </pre>
 
 It's also possible to create master/detail relations with DropboxStorage.
