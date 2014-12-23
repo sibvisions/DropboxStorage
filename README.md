@@ -46,7 +46,7 @@ The file should contain:
 &lt;config&gt;
   &lt;app accessToken="YOUR_ACCESS_TOKEN" /&gt;
 &lt;/config&gt;
-&lt;/pre&gt;
+</pre>
 
 The dropbox directory is a template, used for test cases.
 
