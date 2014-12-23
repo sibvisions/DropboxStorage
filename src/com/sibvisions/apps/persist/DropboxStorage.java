@@ -20,6 +20,10 @@
  */
 package com.sibvisions.apps.persist;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -28,7 +32,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import javax.rad.io.IFileHandle;
 import javax.rad.io.RemoteFileHandle;
+import javax.rad.model.RowDefinition;
 import javax.rad.model.SortDefinition;
 import javax.rad.model.condition.Equals;
 import javax.rad.model.condition.ICondition;
@@ -44,11 +50,16 @@ import com.dropbox.core.DbxClient;
 import com.dropbox.core.DbxEntry;
 import com.dropbox.core.DbxHost;
 import com.dropbox.core.DbxRequestConfig;
+import com.dropbox.core.DbxWriteMode;
 import com.dropbox.core.http.StandardHttpRequestor;
+import com.sibvisions.rad.model.DataBookCSVExporter;
+import com.sibvisions.rad.model.mem.MemDataBook;
 import com.sibvisions.rad.persist.AbstractCachedStorage;
 import com.sibvisions.util.ArrayUtil;
 import com.sibvisions.util.ObjectCache;
 import com.sibvisions.util.ProxyUtil;
+import com.sibvisions.util.type.CommonUtil;
+import com.sibvisions.util.type.FileUtil;
 import com.sibvisions.util.type.StringUtil;
 
 /**
@@ -79,6 +90,9 @@ public class DropboxStorage extends AbstractCachedStorage
     /** the metadata. */
     private MetaData metadata;
 
+    /** the export databook. */
+    private MemDataBook mdbExport;
+
     /** the access token. */
     private String sAccessToken;
     
@@ -88,11 +102,11 @@ public class DropboxStorage extends AbstractCachedStorage
     /** the proxy host. */
     private String sProxyHost;
     
-    /** the proxy port. */
-    private int iProxyPort;
-    
     /** the fetch filetype. */
     private FileType fileType = FileType.File;
+
+    /** the proxy port. */
+    private int iProxyPort;
     
     /** whether this storage is open. */
     private boolean bOpen;
@@ -133,10 +147,6 @@ public class DropboxStorage extends AbstractCachedStorage
      */
     public int getEstimatedRowCount(ICondition pFilter) throws DataSourceException
     {
-        String sPath = getPath(pFilter);
-
-        System.out.println(sPath);
-        
         return 0;
     }
 
@@ -157,9 +167,17 @@ public class DropboxStorage extends AbstractCachedStorage
     // Overwritten methods
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected List<Object[]> executeFetch(ICondition pFilter, SortDefinition pSort, int pFromRow, int pMinimumRowCount) throws DataSourceException
     {
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+        
         boolean bDeepSearch = bRecursive;
         
         String sDir = (String)getEqualsValue(pFilter, "FOLDER");
@@ -195,38 +213,248 @@ public class DropboxStorage extends AbstractCachedStorage
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected Object[] executeRefetchRow(Object[] pDataRow) throws DataSourceException
     {
-        // TODO Auto-generated method stub
-        return null;
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        removeFileHandle(pDataRow);
+        
+        //the only thing we can do, is to create a new file handle (maybe something has changed)
+        if (FileType.File.toString().equals(pDataRow[3]))
+        {
+            return new Object[] {pDataRow[0], 
+                                 pDataRow[1], 
+                                 pDataRow[2], 
+                                 pDataRow[3], 
+                                 createFileHandle((String)pDataRow[0], (String)pDataRow[2])};
+        }
+        else
+        {
+            return new Object[] {pDataRow[0], 
+                                 pDataRow[1], 
+                                 null, 
+                                 pDataRow[3], 
+                                 null};
+        }
     }
     
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected Object[] executeInsert(Object[] pDataRow) throws DataSourceException
     {
-        // TODO Auto-generated method stub
-        return null;
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        if ((pDataRow[3] == null && pDataRow[2] != null)
+            || FileType.File.toString().equals(pDataRow[3]))
+        {
+            if (pDataRow[2] == null)
+            {
+                throw new DataSourceException("Can't save file because file name is undefined!");
+            }
+            
+            String sPath = buildPath(pDataRow);
+            
+            Object data = pDataRow[4];
+
+            DbxEntry.File file;
+            
+            try
+            {
+                file = save(sPath, data);
+                
+                return new Object[] {file.path, 
+                                     CommonUtil.nvl(FileUtil.getDirectory(file.path), "/"), 
+                                     file.name, 
+                                     FileType.File.toString(), 
+                                     createFileHandle(file.path, file.name)};
+            }
+            catch (Exception ex)
+            {
+                if (ex instanceof DataSourceException)
+                {
+                    throw (DataSourceException)ex;
+                }
+                
+                throw new DataSourceException("Couldn't create file '" + sPath + "'!", ex);
+            }
+        }
+        else
+        {
+            if (pDataRow[1] == null)
+            {
+                throw new DataSourceException("Can't create folder because path is undefine!");
+            }
+
+            String sFolder = (String)pDataRow[1];
+            
+            if (StringUtil.isEmpty(sFolder))
+            {
+                sFolder = "/";
+            }
+            
+            try
+            {
+                DbxEntry.Folder folder = client.createFolder(sFolder);
+                
+                return new Object[] {folder.path, folder.name, null, FileType.Folder.toString(), null};
+            }
+            catch (Exception ex)
+            {
+                throw new DataSourceException("Couldn't create folder '" + sFolder + "'!", ex);
+            }
+        }
     }
 
     @Override
     protected Object[] executeUpdate(Object[] pOldDataRow, Object[] pNewDataRow) throws DataSourceException
     {
-        // TODO Auto-generated method stub
-        return null;
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        if (!CommonUtil.equals(pOldDataRow[3], pNewDataRow[3]))
+        {
+            throw new DataSourceException("Can't change file type '" + pOldDataRow[3] + "' to '" + pNewDataRow[3] + "'!");
+        }
+        
+        String sOldPath = buildPath(pOldDataRow);
+        String sNewPath = buildPath(pNewDataRow);
+        
+        Object[] oResult;
+        
+        if (!CommonUtil.equals(sOldPath, sNewPath))
+        {
+            try
+            {
+                //file exists?
+                if (client.getMetadata(sNewPath) != null)
+                {
+                    //try to delete
+                    client.delete(sNewPath);
+                }
+                
+                DbxEntry entry = client.move(sOldPath, sNewPath);
+
+                if (entry != null)
+                {
+                    removeFileHandle(pOldDataRow);
+                    removeFileHandle(pNewDataRow);
+                    
+                    oResult = createRecord(entry);
+                }
+                else
+                {
+                    throw new DataSourceException("Can't move file '" + sOldPath + "' to '" + sNewPath + "'!");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex instanceof DataSourceException)
+                {
+                    throw (DataSourceException)ex;
+                }
+                
+                throw new DataSourceException("Can't move file '" + sOldPath + "' to '" + sNewPath + "'!", ex);
+            }
+        }
+        else
+        {
+            oResult = pNewDataRow;
+        }
+
+        if (!CommonUtil.equals(pOldDataRow[4], pNewDataRow[4]))
+        {
+            try
+            {
+                DbxEntry.File file = save(sNewPath, pNewDataRow[4]);
+
+                removeFileHandle(oResult);
+                
+                oResult[4] = createFileHandle(file);
+            }
+            catch (Exception ex)
+            {
+                throw new DataSourceException("Can't change content of file '" + sNewPath + "'!", ex);
+            }
+        }
+        
+        return oResult;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void executeDelete(Object[] pDeleteDataRow) throws DataSourceException
     {
-        // TODO Auto-generated method stub
-        
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        try
+        {
+            client.delete((String)pDeleteDataRow[0]);
+            
+            removeFileHandle(pDeleteDataRow);
+        }
+        catch (Exception ex)
+        {
+            throw new DataSourceException("Couldn't delete file '" + pDeleteDataRow[0] + "'!", ex);
+        }
     }
     
     @Override
     public void writeCSV(OutputStream pStream, String[] pColumnNames, String[] pLabels, ICondition pFilter, SortDefinition pSort, String pSeparator) throws Exception
     {
-        // TODO Auto-generated method stub
+        if (!isOpen())
+        {
+            throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        if (mdbExport == null)
+        {
+            RowDefinition rowdef = new RowDefinition();
+            
+            for (int i = 0, cnt = metadata.getColumnMetaDataCount(); i < cnt; i++)
+            {
+                rowdef.addColumnDefinition(ColumnMetaData.createColumnDefinition(metadata.getColumnMetaData(i)));
+            }
+            
+            mdbExport = new MemDataBook(rowdef);
+            mdbExport.setName("export");
+            mdbExport.open();
+        }
+        else
+        {
+            mdbExport.close();
+            mdbExport.open();
+        }
+        
+        
+        for (Object[] record : fetch(pFilter, null, 0, -1))
+        {
+            if (record != null)
+            {
+                mdbExport.insert(false);
+                mdbExport.setValues(null, record);
+            }
+        }
+        
+        DataBookCSVExporter.writeCSV(mdbExport, pStream, pColumnNames, pLabels, pFilter, pSort, pSeparator);        
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -303,6 +531,11 @@ public class DropboxStorage extends AbstractCachedStorage
             
             md.addColumnMetaData(cmd);
             
+            cmd = new ColumnMetaData("FOLDER", StringDataType.TYPE_IDENTIFIER);
+            cmd.setNullable(false);
+            
+            md.addColumnMetaData(cmd);
+
             cmd = new ColumnMetaData("NAME", StringDataType.TYPE_IDENTIFIER);
             cmd.setNullable(false);
             
@@ -313,10 +546,16 @@ public class DropboxStorage extends AbstractCachedStorage
             cmd.setAllowedValues(new Object[] {FileType.File.toString(), FileType.Folder.toString()});
             
             md.addColumnMetaData(cmd);
-            md.addColumnMetaData(new ColumnMetaData("CONTENT", BinaryDataType.TYPE_IDENTIFIER));
+
+            cmd = new ColumnMetaData("CONTENT", BinaryDataType.TYPE_IDENTIFIER);
+            cmd.setFetchLargeObjectsLazy(true);
+            
+            md.addColumnMetaData(cmd);
 
             md.removeFeature(Feature.Filter);
             md.removeFeature(Feature.Sort);
+            
+            md.setPrimaryKeyColumnNames(new String[] {"PATH"});
             
             metadata = md;            
             
@@ -346,39 +585,13 @@ public class DropboxStorage extends AbstractCachedStorage
     {
         DbxEntry.WithChildren listing = client.getMetadataWithChildren(pFolder);
         
-        Object[] oRecord;
-        
-        String sUUID;
-
-        boolean bFile;
-        
         for (DbxEntry entry : listing.children)
         {
             if (fileType == FileType.All
                 || (fileType == FileType.File && entry.isFile())
                 || (fileType == FileType.Folder && entry.isFolder()))
             {
-                bFile = entry.isFile();
-                
-                if (bFile)
-                {
-                    DropboxFileHandle handle = new DropboxFileHandle(client, entry.path);
-                    
-                    sUUID = UUID.randomUUID().toString();
-                    
-                    ObjectCache.put(sUUID, handle);
-                }
-                else
-                {
-                    sUUID = null;
-                }
-                
-                oRecord = new Object[] {entry.path, 
-                                        entry.name, 
-                                        bFile ? FileType.File.toString() : FileType.Folder.toString(),
-                                        bFile ? new RemoteFileHandle(entry.name, sUUID) : null};
-
-                pRecords.add(oRecord);
+                pRecords.add(createRecord(entry));
             }
             
             if (entry.isFolder() && pDeep)
@@ -389,16 +602,152 @@ public class DropboxStorage extends AbstractCachedStorage
     }
     
     /**
-     * Gets the path from a condition.
+     * Creates a record for the given entry.
      * 
-     * @param pCondition the condition
-     * @return the path or <code>/</code> if path condition wasn't found
+     * @param pEntry the remote entry
+     * @return the record
      */
-    private String getPath(ICondition pCondition)
+    private Object[] createRecord(DbxEntry pEntry)
     {
-        return null;
+        boolean bFile = pEntry.isFile();
+
+        return new Object[] {pEntry.path, 
+                             bFile ? CommonUtil.nvl(FileUtil.getDirectory(pEntry.path), "/") : pEntry.path,
+                             bFile ? pEntry.name : null, 
+                             bFile ? FileType.File.toString() : FileType.Folder.toString(),
+                             bFile ? createFileHandle(pEntry.asFile()) : null};
+    }
+    
+    /**
+     * Creates a cached file handle for lazy loading.
+     * 
+     * @param pFile the file
+     * @return the {@link RemoteFileHandle}
+     */
+    private RemoteFileHandle createFileHandle(DbxEntry.File pFile)
+    {
+        DropboxFileHandle handle = new DropboxFileHandle(client, pFile);
+        
+        String sUUID = UUID.randomUUID().toString();
+        
+        ObjectCache.put(sUUID, handle);
+        
+        return new RemoteFileHandle(pFile.name, sUUID);
     }
 
+    /**
+     * Creates a cached file handle for lazy loading.
+     * 
+     * @param pPath the file path
+     * @param pName the file name
+     * @return the {@link RemoteFileHandle}
+     */
+    private RemoteFileHandle createFileHandle(String pPath, String pName)
+    {
+        DropboxFileHandle handle = new DropboxFileHandle(client, pPath);
+        
+        String sUUID = UUID.randomUUID().toString();
+        
+        ObjectCache.put(sUUID, handle);
+
+        return new RemoteFileHandle(pName, sUUID);
+    }
+    
+    /**
+     * Removes a file handle from the cache.
+     * 
+     * @param pRecord the record information. The [4] element should be an instance of {@link RemoteFileHandle} in
+     *                order to remove the object from the cache.
+     */
+    private void removeFileHandle(Object[] pRecord)
+    {
+        if (pRecord[4] instanceof RemoteFileHandle)
+        {
+            Object oKey = ((RemoteFileHandle)pRecord[4]).getObjectCacheKey();
+            
+            if (oKey != null)
+            {
+                ObjectCache.remove(oKey);
+            }
+        }
+    }
+    
+    /**
+     * Creates a path with given record.
+     * 
+     * @param pDataRow the record
+     * @return the path
+     */
+    private String buildPath(Object[] pDataRow)
+    {
+        String sPath = (String)pDataRow[1];
+        String sName = (String)pDataRow[2];
+        
+        if (StringUtil.isEmpty(sPath))
+        {
+            sPath = "/";
+        }
+        
+        if (!StringUtil.isEmpty(sName))
+        {
+            if (sPath.endsWith("/"))
+            {
+                sPath += sName;
+            }
+            else
+            {
+                sPath += "/" + sName;
+            }
+        }
+        
+        return sPath;
+    }
+
+    /**
+     * Saves a file.
+     * 
+     * @param pPath the path
+     * @param pContent the new content
+     * @return the saved file
+     * @throws Exception if saving failed
+     */
+    private DbxEntry.File save(String pPath, Object pContent) throws Exception
+    {
+        if (pContent == null)
+        {
+            return client.uploadFile(pPath, DbxWriteMode.force(), 0, new ByteArrayInputStream(new byte[0]));
+        }
+        else if (pContent instanceof byte[])
+        {
+            return client.uploadFile(pPath, DbxWriteMode.force(), ((byte[])pContent).length, new ByteArrayInputStream((byte[])pContent));
+        }
+        else if (pContent instanceof IFileHandle)
+        {
+            return client.uploadFile(pPath, DbxWriteMode.force(), ((IFileHandle)pContent).getLength(), ((IFileHandle)pContent).getInputStream());
+        }
+        else if (pContent instanceof File)
+        {
+            FileInputStream fis = new FileInputStream((File)pContent);
+            
+            try
+            {
+                return client.uploadFile(pPath, DbxWriteMode.force(), ((File)pContent).length(), fis);
+            }
+            finally
+            {
+                CommonUtil.close(fis);
+            }
+        }
+        else if (pContent instanceof InputStream)
+        {
+            return client.uploadFile(pPath, DbxWriteMode.force(), -1, (InputStream)pContent);
+        }
+        else
+        {
+            throw new DataSourceException("Unsupportet content type: " + pContent.getClass().getName());
+        }
+    }
+    
     /**
      * Sets the initial/default root path.
      * 

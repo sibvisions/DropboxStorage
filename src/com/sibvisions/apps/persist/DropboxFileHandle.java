@@ -56,6 +56,9 @@ class DropboxFileHandle implements IFileHandle,
     /** the cache file. */
     private File fiTemp;
     
+    /** the file. */
+    private DbxEntry.File file;
+    
     /** the file metadata. */
     private DbxEntry.File metaData;
     
@@ -64,10 +67,22 @@ class DropboxFileHandle implements IFileHandle,
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     /**
-     * Creates a new instance of {@link DropboxFileHandle}.
+     * Creates a new instance of {@link DropboxFileHandle} with specific file.
      * 
      * @param pClient the dropbox client
-     * @param pPath the path
+     * @param pFile the file
+     */
+    public DropboxFileHandle(DbxClient pClient, DbxEntry.File pFile)
+    {
+        client = pClient;
+        file  = pFile;
+    }
+
+    /**
+     * Creates a new instance of {@link DropboxFileHandle} with path information.
+     * 
+     * @param pClient the dropbox client
+     * @param pPath the path information
      */
     public DropboxFileHandle(DbxClient pClient, String pPath)
     {
@@ -86,7 +101,15 @@ class DropboxFileHandle implements IFileHandle,
      */
     public String getFileName()
     {
-        return FileUtil.getName(sPath);
+        if (file != null)
+        {
+            return file.name;
+        }
+        else
+        {
+            return FileUtil.getName(sPath);
+        }
+        
     }
 
     /**
@@ -105,8 +128,14 @@ class DropboxFileHandle implements IFileHandle,
     public long getLength() throws IOException
     {
         //no init because BinaryDataType checks the length and this would trigger data transfer
-        
-        return fiTemp != null ? fiTemp.length() : -1;
+        if (file != null)
+        {
+            return file.numBytes;
+        }
+        else
+        {
+            return fiTemp != null ? fiTemp.length() : -1; 
+        }
     }
 
     // IValidatable
@@ -136,14 +165,14 @@ class DropboxFileHandle implements IFileHandle,
             
             try
             {
-                File file = File.createTempFile(FileUtil.removeExtension(sName), FileUtil.getExtension(sName));
-                file.deleteOnExit();
+                File fiNew = File.createTempFile(FileUtil.removeExtension(sName), FileUtil.getExtension(sName));
+                fiNew.deleteOnExit();
                 
                 FileOutputStream fos = null;
                 
                 try
                 {
-                    fos = new FileOutputStream(file);
+                    fos = new FileOutputStream(fiNew);
                     
                     metaData = client.getFile(sPath, null, fos);
                 }
@@ -152,7 +181,7 @@ class DropboxFileHandle implements IFileHandle,
                     CommonUtil.close(fos);
                 }
                 
-                fiTemp = file;
+                fiTemp = fiNew;
             }
             catch (Exception ex)
             {
