@@ -24,6 +24,7 @@ import java.io.File;
 
 import javax.rad.io.IFileHandle;
 import javax.rad.model.condition.Equals;
+import javax.rad.model.reference.ReferenceDefinition;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -146,6 +147,36 @@ public class TestDropboxStorage
     }
     
     /**
+     * Tests fetching.
+     * 
+     * @throws Exception if test fails
+     */
+    @Test
+    public void testFetchCustomFolder() throws Exception
+    {
+        storage.setFileType(FileType.Folder);
+        
+        DropboxStorage storageDetail = new DropboxStorage();
+        storageDetail.setAccessToken(getAccessToken());
+        storageDetail.setFileType(FileType.File);
+        storageDetail.open();
+        
+        StorageDataBook bookDetail = new StorageDataBook(storageDetail);
+        bookDetail.setMasterReference(new ReferenceDefinition(new String[] {"FOLDER"}, book, new String[] {"PATH"}));
+        bookDetail.open();
+        
+        book.fetchAll();
+
+        Assert.assertTrue("Dropbox is empty!", book.getRowCount() > 1);
+        
+        book.setSelectedRow(book.searchNext(new Equals("PATH", "/subfolder")));
+        
+        bookDetail.setSelectedRow(0);
+        
+        Assert.assertEquals("1_Contacts.xls", bookDetail.getValueAsString("NAME"));
+    }
+    
+    /**
      * Tests inserting.
      * 
      * @throws Exception if test fails
@@ -211,6 +242,25 @@ public class TestDropboxStorage
         fiTemp = getTempOutputFile(fileHandle);
         
         FileViewer.open(fiTemp);
+    }
+
+    /**
+     * Creates a test folder and renames it.
+     * 
+     * @throws Exception if test fails
+     */
+    @Test
+    public void testCreateAndRenameFolder() throws Exception
+    {
+        book.setSelectedRow(book.searchNext(new Equals("FOLDER", "/newfolder").and(new Equals("TYPE", "Folder"))));
+        book.delete();
+        
+        book.insert(false);
+        book.setValue("FOLDER", "/newfolder");
+        book.saveSelectedRow();
+        
+        book.setValue("FOLDER", "/deleteMe");
+        book.saveSelectedRow();
     }
     
 }   // TestDropboxStorage

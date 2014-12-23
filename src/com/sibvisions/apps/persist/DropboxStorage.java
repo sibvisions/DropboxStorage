@@ -275,7 +275,7 @@ public class DropboxStorage extends AbstractCachedStorage
                 file = save(sPath, data);
                 
                 return new Object[] {file.path, 
-                                     CommonUtil.nvl(FileUtil.getDirectory(file.path), "/"), 
+                                     getDirectory(file.path), 
                                      file.name, 
                                      FileType.File.toString(), 
                                      createFileHandle(file.path, file.name)};
@@ -308,7 +308,7 @@ public class DropboxStorage extends AbstractCachedStorage
             {
                 DbxEntry.Folder folder = client.createFolder(sFolder);
                 
-                return new Object[] {folder.path, folder.name, null, FileType.Folder.toString(), null};
+                return new Object[] {folder.path, folder.path, null, FileType.Folder.toString(), null};
             }
             catch (Exception ex)
             {
@@ -612,7 +612,7 @@ public class DropboxStorage extends AbstractCachedStorage
         boolean bFile = pEntry.isFile();
 
         return new Object[] {pEntry.path, 
-                             bFile ? CommonUtil.nvl(FileUtil.getDirectory(pEntry.path), "/") : pEntry.path,
+                             bFile ? getDirectory(pEntry.path) : pEntry.path,
                              bFile ? pEntry.name : null, 
                              bFile ? FileType.File.toString() : FileType.Folder.toString(),
                              bFile ? createFileHandle(pEntry.asFile()) : null};
@@ -670,6 +670,28 @@ public class DropboxStorage extends AbstractCachedStorage
                 ObjectCache.remove(oKey);
             }
         }
+    }
+    
+    /**
+     * Gets the directory name from the given path.
+     * 
+     * @param pPath the path
+     * @return the directory name
+     */
+    private String getDirectory(String pPath)
+    {
+        String sPath = FileUtil.getDirectory(pPath);
+        
+        if (sPath == null)
+        {
+            sPath = "/";
+        }
+        else if (!sPath.startsWith("/"))
+        {
+            sPath = "/" + sPath;
+        }
+        
+        return sPath;
     }
     
     /**
