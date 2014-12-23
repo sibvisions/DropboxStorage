@@ -11,8 +11,6 @@ Server-side
 <pre>
 DropboxStorage storage = new DropboxStorage();
 storage.setAccessToken(getAccessToken());
-storage.setRecursive(true);
-storage.setFileType(FileType.All);
 storage.open();
 </pre>
 
@@ -36,6 +34,21 @@ book.setValue("FOLDER", "/");
 book.setValue("NAME", "newimage.png");
 book.setValue("CONTENT", FileUtil.getContent(ResourceUtil.getResourceAsStream(resourcepath)));
 </pre>
+
+It's also possible to create master/detail relations with DropboxStorage.
+
+The test cases need a config.xml in the project directory (same location as README.md).
+The file should contain:
+
+<pre>
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config>
+  <app accessToken="YOUR_ACCESS_TOKEN" />
+</config>
+</pre>
+
+The dropbox directory is a template, used for test cases.
 
 
 License
