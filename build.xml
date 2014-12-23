@@ -27,7 +27,7 @@
   <property name="temp" location="${build}/temp" />
 
   <property name="src" location="${basedir}/src" />
-  <property name="libs" location="${basedir}/libs" />
+  <property name="libs" location="${basedir}/lib" />
   <property name="classes" location="${temp}/classes" />
 
   <property name="install" location="${build}/install" />

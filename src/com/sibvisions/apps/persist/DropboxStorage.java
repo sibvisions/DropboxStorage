@@ -227,20 +227,22 @@ public class DropboxStorage extends AbstractCachedStorage
         removeFileHandle(pDataRow);
         
         //the only thing we can do, is to create a new file handle (maybe something has changed)
-        if (FileType.File.toString().equals(pDataRow[3]))
+        if (FileType.File.toString().equals(pDataRow[4]))
         {
             return new Object[] {pDataRow[0], 
                                  pDataRow[1], 
                                  pDataRow[2], 
                                  pDataRow[3], 
-                                 createFileHandle((String)pDataRow[0], (String)pDataRow[2])};
+                                 pDataRow[4], 
+                                 createFileHandle((String)pDataRow[0], (String)pDataRow[3])};
         }
         else
         {
             return new Object[] {pDataRow[0], 
                                  pDataRow[1], 
+                                 pDataRow[2], 
                                  null, 
-                                 pDataRow[3], 
+                                 pDataRow[4], 
                                  null};
         }
     }
@@ -256,17 +258,17 @@ public class DropboxStorage extends AbstractCachedStorage
             throw new DataSourceException("DropboxStorage isn't open!");         
         }
 
-        if ((pDataRow[3] == null && pDataRow[2] != null)
-            || FileType.File.toString().equals(pDataRow[3]))
+        if ((pDataRow[4] == null && pDataRow[3] != null)
+            || FileType.File.toString().equals(pDataRow[4]))
         {
-            if (pDataRow[2] == null)
+            if (pDataRow[3] == null)
             {
                 throw new DataSourceException("Can't save file because file name is undefined!");
             }
             
             String sPath = buildPath(pDataRow);
             
-            Object data = pDataRow[4];
+            Object data = pDataRow[5];
 
             DbxEntry.File file;
             
@@ -274,8 +276,11 @@ public class DropboxStorage extends AbstractCachedStorage
             {
                 file = save(sPath, data);
                 
-                return new Object[] {file.path, 
-                                     getDirectory(file.path), 
+                String sFolder = getFolder(file.path);
+                
+                return new Object[] {file.path,
+                                     getParentFolder(sFolder),
+                                     sFolder, 
                                      file.name, 
                                      FileType.File.toString(), 
                                      createFileHandle(file.path, file.name)};
@@ -292,12 +297,12 @@ public class DropboxStorage extends AbstractCachedStorage
         }
         else
         {
-            if (pDataRow[1] == null)
+            if (pDataRow[2] == null)
             {
-                throw new DataSourceException("Can't create folder because path is undefine!");
+                throw new DataSourceException("Can't create folder because path is undefined!");
             }
 
-            String sFolder = (String)pDataRow[1];
+            String sFolder = (String)pDataRow[2];
             
             if (StringUtil.isEmpty(sFolder))
             {
@@ -308,7 +313,7 @@ public class DropboxStorage extends AbstractCachedStorage
             {
                 DbxEntry.Folder folder = client.createFolder(sFolder);
                 
-                return new Object[] {folder.path, folder.path, null, FileType.Folder.toString(), null};
+                return new Object[] {folder.path, getParentFolder(folder.path), folder.path, null, FileType.Folder.toString(), null};
             }
             catch (Exception ex)
             {
@@ -325,9 +330,9 @@ public class DropboxStorage extends AbstractCachedStorage
             throw new DataSourceException("DropboxStorage isn't open!");         
         }
 
-        if (!CommonUtil.equals(pOldDataRow[3], pNewDataRow[3]))
+        if (!CommonUtil.equals(pOldDataRow[4], pNewDataRow[4]))
         {
-            throw new DataSourceException("Can't change file type '" + pOldDataRow[3] + "' to '" + pNewDataRow[3] + "'!");
+            throw new DataSourceException("Can't change file type '" + pOldDataRow[4] + "' to '" + pNewDataRow[4] + "'!");
         }
         
         String sOldPath = buildPath(pOldDataRow);
@@ -375,15 +380,15 @@ public class DropboxStorage extends AbstractCachedStorage
             oResult = pNewDataRow;
         }
 
-        if (!CommonUtil.equals(pOldDataRow[4], pNewDataRow[4]))
+        if (!CommonUtil.equals(pOldDataRow[5], pNewDataRow[5]))
         {
             try
             {
-                DbxEntry.File file = save(sNewPath, pNewDataRow[4]);
+                DbxEntry.File file = save(sNewPath, pNewDataRow[5]);
 
                 removeFileHandle(oResult);
                 
-                oResult[4] = createFileHandle(file);
+                oResult[5] = createFileHandle(file);
             }
             catch (Exception ex)
             {
@@ -531,6 +536,11 @@ public class DropboxStorage extends AbstractCachedStorage
             
             md.addColumnMetaData(cmd);
             
+            cmd = new ColumnMetaData("PARENT_FOLDER", StringDataType.TYPE_IDENTIFIER);
+            cmd.setNullable(false);
+            
+            md.addColumnMetaData(cmd);
+
             cmd = new ColumnMetaData("FOLDER", StringDataType.TYPE_IDENTIFIER);
             cmd.setNullable(false);
             
@@ -611,8 +621,11 @@ public class DropboxStorage extends AbstractCachedStorage
     {
         boolean bFile = pEntry.isFile();
 
-        return new Object[] {pEntry.path, 
-                             bFile ? getDirectory(pEntry.path) : pEntry.path,
+        String sDirectory = bFile ? getFolder(pEntry.path) : pEntry.path;
+        
+        return new Object[] {pEntry.path,
+                             getParentFolder(sDirectory),
+                             sDirectory,
                              bFile ? pEntry.name : null, 
                              bFile ? FileType.File.toString() : FileType.Folder.toString(),
                              bFile ? createFileHandle(pEntry.asFile()) : null};
@@ -656,14 +669,14 @@ public class DropboxStorage extends AbstractCachedStorage
     /**
      * Removes a file handle from the cache.
      * 
-     * @param pRecord the record information. The [4] element should be an instance of {@link RemoteFileHandle} in
+     * @param pRecord the record information. The [5] element should be an instance of {@link RemoteFileHandle} in
      *                order to remove the object from the cache.
      */
     private void removeFileHandle(Object[] pRecord)
     {
         if (pRecord[4] instanceof RemoteFileHandle)
         {
-            Object oKey = ((RemoteFileHandle)pRecord[4]).getObjectCacheKey();
+            Object oKey = ((RemoteFileHandle)pRecord[5]).getObjectCacheKey();
             
             if (oKey != null)
             {
@@ -673,12 +686,12 @@ public class DropboxStorage extends AbstractCachedStorage
     }
     
     /**
-     * Gets the directory name from the given path.
+     * Gets the folder name from the given path.
      * 
      * @param pPath the path
      * @return the directory name
      */
-    private String getDirectory(String pPath)
+    private String getFolder(String pPath)
     {
         String sPath = FileUtil.getDirectory(pPath);
         
@@ -695,6 +708,22 @@ public class DropboxStorage extends AbstractCachedStorage
     }
     
     /**
+     * Gets the parent folder name for the given directory.
+     * 
+     * @param pPath the directory
+     * @return the parent directory
+     */
+    private String getParentFolder(String pPath)
+    {
+        if ("/".equals(pPath))
+        {
+            return null;
+        }
+        
+        return getFolder(pPath);
+    }
+    
+    /**
      * Creates a path with given record.
      * 
      * @param pDataRow the record
@@ -702,8 +731,8 @@ public class DropboxStorage extends AbstractCachedStorage
      */
     private String buildPath(Object[] pDataRow)
     {
-        String sPath = (String)pDataRow[1];
-        String sName = (String)pDataRow[2];
+        String sPath = (String)pDataRow[2];
+        String sName = (String)pDataRow[3];
         
         if (StringUtil.isEmpty(sPath))
         {
@@ -768,26 +797,6 @@ public class DropboxStorage extends AbstractCachedStorage
         {
             throw new DataSourceException("Unsupportet content type: " + pContent.getClass().getName());
         }
-    }
-    
-    /**
-     * Sets the initial/default root path.
-     * 
-     * @param pRootPath the path (unix style)
-     */
-    public void setRootPath(String pRootPath)
-    {
-        sRootPath = pRootPath;
-    }
-    
-    /**
-     * Gets the initial/default root path.
-     * 
-     * @return the path (unix style)
-     */
-    public String getRootPath()
-    {
-        return sRootPath;
     }
     
     /**

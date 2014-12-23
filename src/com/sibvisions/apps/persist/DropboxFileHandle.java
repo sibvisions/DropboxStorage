@@ -174,7 +174,7 @@ class DropboxFileHandle implements IFileHandle,
                 {
                     fos = new FileOutputStream(fiNew);
                     
-                    metaData = client.getFile(sPath, null, fos);
+                    metaData = client.getFile(file != null ? file.path : sPath, null, fos);
                 }
                 finally
                 {
