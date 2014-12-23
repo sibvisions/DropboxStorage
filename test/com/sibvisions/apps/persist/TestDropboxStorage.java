@@ -187,6 +187,9 @@ public class TestDropboxStorage
         book.saveAllRows();
         
         book.delete();
+        
+        book.setSelectedRow(book.searchNext(new Equals("FOLDER", "/renamed").and(new Equals("TYPE", "Folder"))));
+        book.delete();
     }
 
     /**

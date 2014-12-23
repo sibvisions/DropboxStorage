@@ -169,7 +169,7 @@ class DropboxFileHandle implements IFileHandle,
                 fiNew.deleteOnExit();
                 
                 FileOutputStream fos = null;
-                
+
                 try
                 {
                     fos = new FileOutputStream(fiNew);
