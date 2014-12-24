@@ -1,0 +1,8 @@
+"Path";"Parent Folder";"Folder";"Name";"Type"
+"/deleteMe";"/";"/deleteMe";"deleteMe";"Folder"
+"/Öffentlich";"/";"/Öffentlich";"Öffentlich";"Folder"
+"/Öffentlich/Test";"/Öffentlich";"/Öffentlich/Test";"Test";"Folder"
+"/Privat";"/";"/Privat";"Privat";"Folder"
+"/reports";"/";"/reports";"reports";"Folder"
+"/subfolder";"/";"/subfolder";"subfolder";"Folder"
+"/subfolder/sub2";"/subfolder";"/subfolder/sub2";"sub2";"Folder"

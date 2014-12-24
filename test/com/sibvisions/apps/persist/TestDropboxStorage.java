@@ -24,6 +24,8 @@ import java.io.File;
 
 import javax.rad.io.IFileHandle;
 import javax.rad.model.condition.Equals;
+import javax.rad.model.condition.Like;
+import javax.rad.model.condition.LikeIgnoreCase;
 import javax.rad.model.reference.ReferenceDefinition;
 
 import org.junit.After;
@@ -33,7 +35,6 @@ import org.junit.Test;
 
 import com.sibvisions.apps.persist.DropboxStorage.FileType;
 import com.sibvisions.rad.persist.StorageDataBook;
-import com.sibvisions.util.FileViewer;
 import com.sibvisions.util.type.CommonUtil;
 import com.sibvisions.util.type.FileUtil;
 import com.sibvisions.util.type.ResourceUtil;
@@ -71,7 +72,6 @@ public class TestDropboxStorage
     {
         storage = new DropboxStorage();
         storage.setAccessToken(getAccessToken());
-        storage.setRecursive(true);
         storage.setFileType(FileType.All);
         storage.open();
         
@@ -135,15 +135,33 @@ public class TestDropboxStorage
     @Test
     public void testFetch() throws Exception
     {
+        storage.setRecursive(true);
+        
         book.fetchAll();
         
         Assert.assertTrue("Dropbox is empty!", book.getRowCount() > 1);
         
-        book.setSelectedRow(0);
+        book.setSelectedRow(book.searchNext(new Like("NAME", "Erste Schritte.pdf")));
+        
+        Assert.assertTrue("PDF document wasn't found!", book.getSelectedRow() >= 0);
 
         File fiTemp = getTempOutputFile((IFileHandle)book.getValue("CONTENT"));
         
-        FileViewer.open(fiTemp);
+        Assert.assertArrayEquals(FileUtil.getContent(new File(new File("").getAbsolutePath(), "/dropbox/Erste Schritte.pdf")), FileUtil.getContent(fiTemp));
+    }
+
+    /**
+     * Tests fetching with filter condition.
+     * 
+     * @throws Exception if fetching data failed
+     */
+    @Test
+    public void testFetchWithFilter() throws Exception
+    {
+        book.setFilter(new LikeIgnoreCase("NAME", "*Contacts.*"));
+        book.fetchAll();
+        
+        Assert.assertEquals(2, book.getRowCount());
     }
     
     /**
@@ -231,17 +249,29 @@ public class TestDropboxStorage
     @Test
     public void testCSV() throws Exception
     {
+        storage.setRecursive(true);
+        
         IFileHandle fileHandle = storage.createCSV("dropbox.csv", null, null, new Equals("TYPE", "Folder"), null);
         
         File fiTemp = getTempOutputFile(fileHandle);
         
-        FileViewer.open(fiTemp);
+        //FileViewer.open(fiTemp);
         
         fileHandle = storage.createCSV("dropbox_all.csv", null, null, null, null);
         
+        System.out.println(fiTemp);
+        
+        Assert.assertArrayEquals(FileUtil.getContent(ResourceUtil.getResourceAsStream("/com/sibvisions/apps/persist/Folders.csv")), 
+                                 FileUtil.getContent(fiTemp));
+        
         fiTemp = getTempOutputFile(fileHandle);
         
-        FileViewer.open(fiTemp);
+        System.out.println(fiTemp);        
+        
+        Assert.assertArrayEquals(FileUtil.getContent(ResourceUtil.getResourceAsStream("/com/sibvisions/apps/persist/AllFiles.csv")), 
+                                 FileUtil.getContent(fiTemp));
+
+        //FileViewer.open(fiTemp);
     }
 
     /**

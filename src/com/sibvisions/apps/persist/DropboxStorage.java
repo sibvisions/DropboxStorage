@@ -34,6 +34,7 @@ import java.util.UUID;
 
 import javax.rad.io.IFileHandle;
 import javax.rad.io.RemoteFileHandle;
+import javax.rad.model.ModelException;
 import javax.rad.model.RowDefinition;
 import javax.rad.model.SortDefinition;
 import javax.rad.model.condition.Equals;
@@ -53,6 +54,7 @@ import com.dropbox.core.DbxRequestConfig;
 import com.dropbox.core.DbxWriteMode;
 import com.dropbox.core.http.StandardHttpRequestor;
 import com.sibvisions.rad.model.DataBookCSVExporter;
+import com.sibvisions.rad.model.mem.DataRow;
 import com.sibvisions.rad.model.mem.MemDataBook;
 import com.sibvisions.rad.persist.AbstractCachedStorage;
 import com.sibvisions.util.ArrayUtil;
@@ -73,6 +75,9 @@ public class DropboxStorage extends AbstractCachedStorage
     // Class members
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    /** the filter value if null. */
+    private static final String NULL = "/";
+    
     /** the file type enumeration. */
     public enum FileType
     {
@@ -90,9 +95,12 @@ public class DropboxStorage extends AbstractCachedStorage
     /** the metadata. */
     private MetaData metadata;
 
+    /** the row definition. */
+    private RowDefinition rowdef;
+    
     /** the export databook. */
     private MemDataBook mdbExport;
-
+    
     /** the access token. */
     private String sAccessToken;
     
@@ -112,7 +120,7 @@ public class DropboxStorage extends AbstractCachedStorage
     private boolean bOpen;
     
     /** whether fetch should act recursive. */
-    private boolean bRecursive;
+    private boolean bRecursive = false;
     
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Initialization
@@ -178,30 +186,59 @@ public class DropboxStorage extends AbstractCachedStorage
             throw new DataSourceException("DropboxStorage isn't open!");         
         }
         
+        String sFolder = null;
+        
         boolean bDeepSearch = bRecursive;
         
-        String sDir = (String)getEqualsValue(pFilter, "FOLDER");
-        
-        if (StringUtil.isEmpty(sDir))
+        if (pFilter == null)
         {
-            sDir = sRootPath;
+            //NO Filter -> search all
+            sFolder = sRootPath;
         }
         else
         {
-            //search specific path -> don't search recursive
-            bDeepSearch = false;
-        }
-        
-        if (StringUtil.isEmpty(sDir))
-        {
-            sDir = "/";
+            String sFilter = (String)getEqualsValue(pFilter, "FOLDER");                
+
+            if (sFilter != null && sFilter != NULL)
+            {
+                sFolder = sFilter;
+            }
+            else
+            {
+                sFilter = (String)getEqualsValue(pFilter, "PARENT_FOLDER");
+                
+                if (sFilter != null)
+                {
+                    sFolder = sFilter;
+                }
+            }
+            
+            if (!bDeepSearch)
+            {
+                //no folder search -> must be a complex filter -> deep search
+                bDeepSearch = sFolder == null;
+            }
         }
         
         try
         {
             List<Object[]> liRecords = new ArrayUtil<Object[]>();
 
-            searchRecords(sDir, bDeepSearch, liRecords);
+            if (sFolder == NULL)
+            {
+                DbxEntry entry = client.getMetadata("/");
+                
+                DataRow row = new DataRow(rowdef);
+                
+                if (pFilter.isFulfilled(row))
+                {
+                    liRecords.add(createRecord(entry));
+                }
+            }
+            else
+            {
+                searchRecords(sFolder, bDeepSearch, liRecords, pFilter);
+            }
             
             liRecords.add(null);
             
@@ -241,7 +278,7 @@ public class DropboxStorage extends AbstractCachedStorage
             return new Object[] {pDataRow[0], 
                                  pDataRow[1], 
                                  pDataRow[2], 
-                                 null, 
+                                 getFolderDisplayName((String)pDataRow[3]), 
                                  pDataRow[4], 
                                  null};
         }
@@ -258,7 +295,7 @@ public class DropboxStorage extends AbstractCachedStorage
             throw new DataSourceException("DropboxStorage isn't open!");         
         }
 
-        if ((pDataRow[4] == null && pDataRow[3] != null)
+        if ((pDataRow[4] == null && pDataRow[5] != null)
             || FileType.File.toString().equals(pDataRow[4]))
         {
             if (pDataRow[3] == null)
@@ -302,18 +339,13 @@ public class DropboxStorage extends AbstractCachedStorage
                 throw new DataSourceException("Can't create folder because path is undefined!");
             }
 
-            String sFolder = (String)pDataRow[2];
-            
-            if (StringUtil.isEmpty(sFolder))
-            {
-                sFolder = "/";
-            }
+            String sFolder = getFolderDisplayName((String)pDataRow[2]);
             
             try
             {
                 DbxEntry.Folder folder = client.createFolder(sFolder);
                 
-                return new Object[] {folder.path, getParentFolder(folder.path), folder.path, null, FileType.Folder.toString(), null};
+                return new Object[] {folder.path, getParentFolder(folder.path), folder.path, getFolderDisplayName(folder.name), FileType.Folder.toString(), null};
             }
             catch (Exception ex)
             {
@@ -328,6 +360,11 @@ public class DropboxStorage extends AbstractCachedStorage
         if (!isOpen())
         {
             throw new DataSourceException("DropboxStorage isn't open!");         
+        }
+
+        if (!CommonUtil.equals(pOldDataRow[4], pNewDataRow[4]))
+        {
+            throw new DataSourceException("Can't change file type '" + pOldDataRow[4] + "' to '" + pNewDataRow[4] + "'!");
         }
 
         if (!CommonUtil.equals(pOldDataRow[4], pNewDataRow[4]))
@@ -432,13 +469,6 @@ public class DropboxStorage extends AbstractCachedStorage
 
         if (mdbExport == null)
         {
-            RowDefinition rowdef = new RowDefinition();
-            
-            for (int i = 0, cnt = metadata.getColumnMetaDataCount(); i < cnt; i++)
-            {
-                rowdef.addColumnDefinition(ColumnMetaData.createColumnDefinition(metadata.getColumnMetaData(i)));
-            }
-            
             mdbExport = new MemDataBook(rowdef);
             mdbExport.setName("export");
             mdbExport.open();
@@ -468,8 +498,10 @@ public class DropboxStorage extends AbstractCachedStorage
 
     /**
      * Opens this storage.
+     * 
+     * @throws DataSourceException if opening failed
      */
-    public void open()
+    public void open() throws DataSourceException
     {
         if (!bOpen)
         {
@@ -562,12 +594,25 @@ public class DropboxStorage extends AbstractCachedStorage
             
             md.addColumnMetaData(cmd);
 
-            md.removeFeature(Feature.Filter);
             md.removeFeature(Feature.Sort);
             
             md.setPrimaryKeyColumnNames(new String[] {"PATH"});
             
             metadata = md;            
+
+            rowdef = new RowDefinition();
+            
+            try
+            {
+                for (int i = 0, cnt = metadata.getColumnMetaDataCount(); i < cnt; i++)
+                {
+                    rowdef.addColumnDefinition(ColumnMetaData.createColumnDefinition(metadata.getColumnMetaData(i)));
+                }
+            }
+            catch (ModelException me)
+            {
+                throw new DataSourceException("Can't create row definition!", me);
+            }
             
             bOpen = true;
         }
@@ -582,6 +627,22 @@ public class DropboxStorage extends AbstractCachedStorage
     {
         return bOpen;
     }
+
+    /**
+     * Search dropbox records.
+     * 
+     * @param pFolder the folder to search
+     * @param pDeep <code>true</code> to search in sub folders as well
+     * @param pRecords the found records
+     * @param pFilter the filter condition
+     * @throws Exception if iterating folders fails
+     */
+    private void searchRecords(String pFolder, boolean pDeep, List<Object[]> pRecords, ICondition pFilter) throws Exception
+    {
+        DataRow row = new DataRow(rowdef);
+        
+        searchRecords(pFolder, pDeep, pRecords, pFilter, row);
+    }    
     
     /**
      * Search dropbox records.
@@ -589,11 +650,13 @@ public class DropboxStorage extends AbstractCachedStorage
      * @param pFolder the folder to search
      * @param pDeep <code>true</code> to search in sub folders as well
      * @param pRecords the found records
+     * @param pFilter the filter condition
+     * @param pSearch the temporary search row (for checking the filter condition)
      * @throws Exception if iterating folders fails
      */
-    private void searchRecords(String pFolder, boolean pDeep, List<Object[]> pRecords) throws Exception
+    private void searchRecords(String pFolder, boolean pDeep, List<Object[]> pRecords, ICondition pFilter, DataRow pSearch) throws Exception
     {
-        DbxEntry.WithChildren listing = client.getMetadataWithChildren(pFolder);
+        DbxEntry.WithChildren listing = client.getMetadataWithChildren(getFolderDisplayName(pFolder));
         
         for (DbxEntry entry : listing.children)
         {
@@ -601,12 +664,26 @@ public class DropboxStorage extends AbstractCachedStorage
                 || (fileType == FileType.File && entry.isFile())
                 || (fileType == FileType.Folder && entry.isFolder()))
             {
-                pRecords.add(createRecord(entry));
+                Object[] oRecord = createRecord(entry);
+                
+                if (pFilter != null)
+                {
+                    pSearch.setValues(null, oRecord);
+                    
+                    if (pFilter.isFulfilled(pSearch))
+                    {
+                        pRecords.add(oRecord);                        
+                    }
+                }
+                else
+                {
+                    pRecords.add(oRecord);
+                }
             }
             
             if (entry.isFolder() && pDeep)
             {
-                searchRecords(entry.path, pDeep, pRecords);
+                searchRecords(entry.path, pDeep, pRecords, pFilter);
             }
         }
     }
@@ -626,7 +703,7 @@ public class DropboxStorage extends AbstractCachedStorage
         return new Object[] {pEntry.path,
                              getParentFolder(sDirectory),
                              sDirectory,
-                             bFile ? pEntry.name : null, 
+                             bFile ? pEntry.name : getFolderDisplayName(pEntry.name), 
                              bFile ? FileType.File.toString() : FileType.Folder.toString(),
                              bFile ? createFileHandle(pEntry.asFile()) : null};
     }
@@ -708,6 +785,22 @@ public class DropboxStorage extends AbstractCachedStorage
     }
     
     /**
+     * Gets the display name of the given folder.
+     * 
+     * @param pName the folder name (root node is empty)
+     * @return the display name of the given folder (/ for root folder)
+     */
+    private String getFolderDisplayName(String pName)
+    {
+        if (StringUtil.isEmpty(pName))
+        {
+            return "/";
+        }
+        
+        return pName;
+    }
+    
+    /**
      * Gets the parent folder name for the given directory.
      * 
      * @param pPath the directory
@@ -731,23 +824,32 @@ public class DropboxStorage extends AbstractCachedStorage
      */
     private String buildPath(Object[] pDataRow)
     {
-        String sPath = (String)pDataRow[2];
-        String sName = (String)pDataRow[3];
+        String sPath = getFolderDisplayName((String)pDataRow[2]);
         
-        if (StringUtil.isEmpty(sPath))
+        if (pDataRow[5] != null || FileType.File.toString().equals(pDataRow[4]))
         {
-            sPath = "/";
-        }
-        
-        if (!StringUtil.isEmpty(sName))
-        {
-            if (sPath.endsWith("/"))
+            String sName = (String)pDataRow[3];
+            
+            if (!StringUtil.isEmpty(sName))
             {
-                sPath += sName;
+                if (sPath.endsWith("/"))
+                {
+                    sPath += sName;
+                }
+                else
+                {
+                    sPath += "/" + sName;
+                }
             }
-            else
+        }
+        else
+        {
+            if ("/".equals(pDataRow[3]))
             {
-                sPath += "/" + sName;
+                if (!((String)pDataRow[2]).endsWith("/" + pDataRow[3]))
+                {
+                    sPath = sPath.substring(0, sPath.lastIndexOf('/')) + pDataRow[3]; 
+                }
             }
         }
         
@@ -877,7 +979,9 @@ public class DropboxStorage extends AbstractCachedStorage
                 {
                     if (pColumn.equals(((Equals)cond).getColumnName()))
                     {
-                        return ((Equals)cond).getValue();
+                        Object oValue = ((Equals)cond).getValue();
+                        
+                        return oValue == null ? NULL : oValue;
                     }
                 }
             }
@@ -886,7 +990,9 @@ public class DropboxStorage extends AbstractCachedStorage
         {
             if (pColumn.equals(((Equals)pFilter).getColumnName()))
             {
-                return ((Equals)pFilter).getValue();
+                Object oValue = ((Equals)pFilter).getValue();
+                
+                return oValue == null ? NULL : oValue;
             }
         }
         
