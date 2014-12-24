@@ -6,17 +6,34 @@ A JVx storage implementation for Dropbox.
 Usage
 =====
 
-Server-side
+### Flat
 
-<pre>
-DropboxStorage storage = new DropboxStorage();
-storage.setAccessToken(getAccessToken());
-storage.open();
-</pre>
+**Server-side**
 
-Client-side
+```java
+public DropboxStorage getFiles() throws Exception
+{
+    DropboxStorage storage = (DropboxStorage)get("files");
+    
+    if (storage == null)
+    {
+        storage = new DropboxStorage();
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setFileType(FileType.All);
+        //use "flat" style
+        storage.setRecursive(true);
+        storage.open();
+        
+        put("files", storage);
+    }
+    
+    return dbx;
+}
+```
 
-<pre>
+**Client-side**
+
+```java
 RemoteDataBook book = new RemoteDataBook();
 book.setName(storagename);
 book.setDataSource(getDataSource());
@@ -34,22 +51,88 @@ book.setValue("FOLDER", "/");
 book.setValue("NAME", "newimage.png");
 book.setValue("CONTENT", 
               FileUtil.getContent(ResourceUtil.getResourceAsStream(resourcepath)));
-</pre>
+```
 
-It's also possible to create master/detail relations with DropboxStorage.
+### Master/Detail or Self-joined###
+
+**Server-side**
+
+```java
+public DropboxStorage getFiles() throws Exception
+{
+    DropboxStorage storage = (DropboxStorage)get("files");
+    
+    if (storage == null)
+    {
+        storage = new DropboxStorage();
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setFileType(FileType.File);
+        storage.open();
+        
+        put("files", storage);
+    }
+    
+    return dbx;
+}
+
+public DropboxStorage getFolders() throws Exception
+{
+    DropboxStorage storage = (DropboxStorage)get("folders");
+    
+    if (storage == null)
+    {
+        storage = new DropboxStorage();
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setFileType(FileType.Folder);
+        storage.open();
+        
+        put("folders", storage);
+    }
+    
+    return storage;
+}
+```
+
+**Client-side**
+
+```java
+RemoteDataBook rdbFolder.setName("folders");
+rdbFolder.setDataSource(getDataSource());
+rdbFolder.setMasterReference(new ReferenceDefinition(new String[] { "PARENT_FOLDER" }, 
+                                                     rdbFolder, 
+                                                     new String[] { "FOLDER" }));
+rdbFolder.open();
+		
+rdbFolder.getRowDefinition().setColumnView(ITreeControl.class, 
+                                           new ColumnView(new String[] { "NAME" }));
+
+rdbFiles.setName("files");
+rdbFiles.setDataSource(getDataSource());
+rdbFiles.setMasterReference(new ReferenceDefinition(new String[] { "FOLDER" }, 
+                                                    rdbFolder, 
+                                                    new String[] { "FOLDER" }));
+rdbFiles.open();
+		
+rdbFiles.getRowDefinition().setColumnView(ITableControl.class, 
+                                          new ColumnView(new String[] { "NAME" }));
+```
 
 The test cases need a config.xml in the project directory (same location as README.md).
 The file should contain:
 
-<pre>
-&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
 
-&lt;config&gt;
-  &lt;app accessToken="YOUR_ACCESS_TOKEN" /&gt;
-&lt;/config&gt;
-</pre>
+<config>
+  <app accessToken="YOUR_ACCESS_TOKEN" />
+</config>
+```
 
-The dropbox directory is a template, used for test cases.
+Special folders
+===============
+
+- The **dropbox** directory is a Dropbox template, used for test cases.
+- The **doc** directory contains source archives for libs.
 
 
 License
