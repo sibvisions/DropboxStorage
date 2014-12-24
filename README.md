@@ -18,7 +18,8 @@ public DropboxStorage getFiles() throws Exception
     if (storage == null)
     {
         storage = new DropboxStorage();
-        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().
+                                   getProperty("/application/dropbox/accessToken"));
         storage.setFileType(FileType.All);
         //use "flat" style
         storage.setRecursive(true);
@@ -65,7 +66,8 @@ public DropboxStorage getFiles() throws Exception
     if (storage == null)
     {
         storage = new DropboxStorage();
-        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().
+                                   getProperty("/application/dropbox/accessToken"));
         storage.setFileType(FileType.File);
         storage.open();
         
@@ -82,7 +84,8 @@ public DropboxStorage getFolders() throws Exception
     if (storage == null)
     {
         storage = new DropboxStorage();
-        storage.setAccessToken(SessionContext.getCurrentSessionConfig().getProperty("/application/token"));
+        storage.setAccessToken(SessionContext.getCurrentSessionConfig().
+                                   getProperty("/application/dropbox/accessToken"));
         storage.setFileType(FileType.Folder);
         storage.open();
         
