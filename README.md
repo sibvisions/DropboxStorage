@@ -28,7 +28,7 @@ public DropboxStorage getFiles() throws Exception
         put("files", storage);
     }
     
-    return storage;
+    return dbx;
 }
 ```
 
@@ -74,7 +74,7 @@ public DropboxStorage getFiles() throws Exception
         put("files", storage);
     }
     
-    return storage;
+    return dbx;
 }
 
 public DropboxStorage getFolders() throws Exception
