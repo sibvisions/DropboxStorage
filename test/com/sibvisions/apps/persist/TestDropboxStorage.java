@@ -22,11 +22,11 @@ package com.sibvisions.apps.persist;
 
 import java.io.File;
 
-import javax.rad.io.IFileHandle;
-import javax.rad.model.condition.Equals;
-import javax.rad.model.condition.Like;
-import javax.rad.model.condition.LikeIgnoreCase;
-import javax.rad.model.reference.ReferenceDefinition;
+import jvx.rad.io.IFileHandle;
+import jvx.rad.model.condition.Equals;
+import jvx.rad.model.condition.Like;
+import jvx.rad.model.condition.LikeIgnoreCase;
+import jvx.rad.model.reference.ReferenceDefinition;
 
 import org.junit.After;
 import org.junit.Assert;

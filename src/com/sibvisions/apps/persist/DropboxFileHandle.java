@@ -26,7 +26,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import javax.rad.io.IFileHandle;
+import jvx.rad.io.IFileHandle;
 
 import com.dropbox.core.DbxClient;
 import com.dropbox.core.DbxEntry;

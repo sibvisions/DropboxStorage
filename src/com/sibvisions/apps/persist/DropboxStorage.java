@@ -32,20 +32,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-import javax.rad.io.IFileHandle;
-import javax.rad.io.RemoteFileHandle;
-import javax.rad.model.ModelException;
-import javax.rad.model.RowDefinition;
-import javax.rad.model.SortDefinition;
-import javax.rad.model.condition.Equals;
-import javax.rad.model.condition.ICondition;
-import javax.rad.model.condition.OperatorCondition;
-import javax.rad.model.datatype.BinaryDataType;
-import javax.rad.model.datatype.StringDataType;
-import javax.rad.persist.ColumnMetaData;
-import javax.rad.persist.DataSourceException;
-import javax.rad.persist.MetaData;
-import javax.rad.persist.MetaData.Feature;
+import jvx.rad.io.IFileHandle;
+import jvx.rad.io.RemoteFileHandle;
+import jvx.rad.model.ModelException;
+import jvx.rad.model.RowDefinition;
+import jvx.rad.model.SortDefinition;
+import jvx.rad.model.condition.Equals;
+import jvx.rad.model.condition.ICondition;
+import jvx.rad.model.condition.OperatorCondition;
+import jvx.rad.model.datatype.BinaryDataType;
+import jvx.rad.model.datatype.StringDataType;
+import jvx.rad.persist.ColumnMetaData;
+import jvx.rad.persist.DataSourceException;
+import jvx.rad.persist.MetaData;
+import jvx.rad.persist.MetaData.Feature;
 
 import com.dropbox.core.DbxClient;
 import com.dropbox.core.DbxEntry;
@@ -163,7 +163,7 @@ public class DropboxStorage extends AbstractCachedStorage
      * 
      * @throws Throwable if closing failed
      */
-    public void close() throws Throwable
+    public void close()
     {
         if (bOpen)
         {
@@ -606,7 +606,7 @@ public class DropboxStorage extends AbstractCachedStorage
             {
                 for (int i = 0, cnt = metadata.getColumnMetaDataCount(); i < cnt; i++)
                 {
-                    rowdef.addColumnDefinition(ColumnMetaData.createColumnDefinition(metadata.getColumnMetaData(i)));
+                    rowdef.addColumnDefinition(metadata.getColumnMetaData(i).createColumnDefinition());
                 }
             }
             catch (ModelException me)
